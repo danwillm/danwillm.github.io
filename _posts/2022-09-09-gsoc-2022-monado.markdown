@@ -1,0 +1,82 @@
+---
+layout: post
+title:  "GSoC '22 @ Monado"
+date:   2022-09-09 16:49:47 +0100
+categories: blog_post
+---
+
+For the past couple of months, I've been working on implementing the [OpenGloves Driver](https://github.com/LucidVR/opengloves-driver) into Monado as part of [Google Summer of Code 2022](https://summerofcode.withgoogle.com/). It's been a great couple of months, and I've learned a ton from working on the project, thanks to my great mentors: Moses and Christoph.
+
+
+OpenGloves was previously a Windows-only OpenVR Driver for Virtual Reality Gloves, compatible only with [SteamVR](https://store.steampowered.com/app/250820/SteamVR).  
+
+OpenGloves is part of the LucidVR project, a project to create cheap and easy-to-build DIY VR Gloves which are capable of hand tracking and force feedback: a method to restrict finger movement making it feel like you're holding an object.  
+
+You can see an example of the project as featured on this Linus Tech Tips video:
+
+<iframe width="560" height="315" src="https://www.youtube.com/embed/jGyHT0t-mtw" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+<br>
+
+## Developments made during GSoC
+As mentioned, before GSoC OpenGloves was Windows-only, and compatible only with OpenVR. While OpenVR is the current de-facto standard for VR, it is slowly being replaced by OpenXR.
+
+OpenGloves used the driver interface OpenVR provides, along with the skeletal input system to get the gloves working with OpenVR applications (which is what the majority of games are currently using). OpenVR doesn't have support for extensions, meaning that we couldn't create our own specification for force feedback in OpenVR, so OpenGloves provided a named pipe for applications to send force feedback data. This worked fine, but Linux and OpenXR users were disappointed with the fact OpenGloves only supported Windows and OpenVR.
+
+[The OpenXR Specification](https://registry.khronos.org/OpenXR/specs/1.0/html/xrspec.html) doesn't yet have a standard for device drivers (_Khronos pls fix_), so I used the device driver interface that is already present in Monado: [xrt_device](https://gitlab.freedesktop.org/monado/monado/-/blob/main/src/xrt/include/xrt/xrt_device.h).
+
+I implemented an initial version of OpenGloves with Monado's device driver interface, which was capable of hand tracking, getting tracking data from other controllers (the gloves themselves do not have tracking capabilities) and providing support for inputs like joysticks and buttons. This worked great, and an early demo of the hand tracking capabilities can be seen here:
+
+<iframe width="560" height="315" src="https://www.youtube.com/embed/vLD0tpKkBmE" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+
+<br>
+
+### Force Feedback
+
+OpenXR has the ability to extend its functionality with Extensions. OpenXR Extensions are a way to add additional structures and functions to the specification, to provide standardised functionality for a feature across runtimes and applications, without having to be part of the initial specification.  
+
+Adding a force feedback OpenXR Extension is an ideal way of adding force feedback functionality into applications, as it can be supported within the specification itself, instead of requiring some third-party ipc communication method to be implemented in the application, which would also lead to fragmentation if other vendors were to implement their own force feedback implementations.
+
+The extension we came up with is rather simple: it provides a set of locations and a value between 0-1, specifying the restriction of the range of movement of that location.  
+
+We decided to go for a simple extension to get a feel for what else would need to be developed in the future, but also as there are currently no devices that are capable of anything more than one dimension of force feedback on the market. It is encouraged by the specification to not think too far into the future about what other devices your extension might need to support, as most of the time these predictions are wrong. If another vendor comes up with hardware that can support more dimensions and directions, then they are able to extend the extension and issue a new version, or alternatively develop their own.
+
+
+## Merge Requests & Branches Created
+### Monado
+#### OpenGloves
+[MR 1413: add opengloves driver](https://gitlab.freedesktop.org/monado/monado/-/merge_requests/1413)  
+- This merge request added an initial implementation of OpenGloves into Monado. It had the ability to get tracking from other devices in the system, perform hand tracking and used the input system for button and joystick inputs.
+
+[MR 1486: Implement xr_mndx_force_feedback_curl extension support](https://gitlab.freedesktop.org/monado/monado/-/merge_requests/1486)
+- This merge request added the implementation of the force feedback OpenXR Extension I created into Monado, and added support for it within OpenGloves. This merge request hasn't yet been merged as the extension is undergoing review from the OpenXR Working Group.
+
+#### Misc
+[MR 1437: add u_hand_simulation](https://gitlab.freedesktop.org/monado/monado/-/merge_requests/1437)
+- This merge request improved upon the hand tracking simulation Monado uses to calculate the absolute position of finger joints from curl/splay inputs. It is now being used for all device drivers inside of Monado, including the Index and Vive controllers.
+
+[MR 1433: add skeletal input to steamvr driver](https://gitlab.freedesktop.org/monado/monado/-/merge_requests/1433)
+- This merge request added skeletal input support to the SteamVR driver Monado has to make Monado compatible with OpenVR. With this change, OpenGloves is compatible with SteamVR on Linux.
+
+### OpenXR Docs
+[PR 133: Reserve 9 extensions for MNDX](https://github.com/KhronosGroup/OpenXR-Docs/pull/133)
+- This pull request reserved extension numbers in OpenXR for the extension I planned on creating for Force Feedback. It was made available in [OpenXR Specification 1.0.25](https://github.com/KhronosGroup/OpenXR-Docs/commit/388c2bc007801552bafa1c4e6dc49a74c9469695).  
+
+[PR 136: XR_MNDX_force_feedback_curl](https://github.com/KhronosGroup/OpenXR-Docs/pull/136)
+- This pull request adds the force feedback extension to OpenXR. This pull request hasn't yet been merged as the extension is undergoing review from the OpenXR Working Group.
+
+### StereoKit
+[stereokit/force-feedback-demo](https://github.com/danwillm/stereokit/tree/force-feedback-demo)
+- This branch is a demo of force feedback inside of [SteroKit](https://github.com/stereokit/stereokit). The demo contains two buttons, one to fully activate force feedback, and the other to fully relax it. It is meant to be a simple demo making it easy to test whether the basis of an OpenXR extension was working.
+
+### Godot
+[godot_openxr/force-feedback-ext](https://github.com/danwillm/godot_openxr/tree/force-feedback-ext)
+- This branch creates a plugin for force feedback inside of Godot OpenXR. It is a more fully-featured demo of the extension's capabilities, with the ability to activate force feedback on an object pickup, and to vary the amount of force feedback applied when doing so.
+
+### Other Stuff
+#### OpenGloves
+[PR 207: Refactor opengloves into server + driver structure](https://github.com/LucidVR/opengloves-driver/pull/207)
+- This PR splits OpenGloves into a server + driver. The reasoning for refactoring OpenGloves into this structure is to create a common shared library of code that can be used across different driver interfaces, such OpenVR/Monado, to avoid duplicating code required by each.  
+
+#### Mercury SteamVR Driver
+[PR 1: SteamVR Driver](https://github.com/slitcch/mercury_steamvr_driver/pull/1)
+- This PR added support for hand tracking using the Valve Index cameras to SteamVR.
